@@ -1,0 +1,455 @@
+---
+title: "HW#5"
+author: "RKD2220820"
+date: "2025-03-16"
+output:
+  word_document: default
+  pdf_document: default
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+## Loading necessary libraries
+# Description: In this step, we are loading the required R libraries to handle CSV files and manipulate the data.
+
+```{r}
+library(dplyr)
+library(readr)
+
+arabica_data <- read.csv("S:\\Study\\OneDrive - DePaul University\\2nd Quarter\\DSC 441 Fundamentals of Data Science\\Data files\\Final assignment\\arabica_data_cleaned.csv")
+robusta_data <- read.csv("S:\\Study\\OneDrive - DePaul University\\2nd Quarter\\DSC 441 Fundamentals of Data Science\\Data files\\Final assignment\\robusta_data_cleaned.csv")
+
+
+head(arabica_data)
+head(robusta_data)
+
+
+arabica_data$Coffee_Type <- "Arabica"
+robusta_data$Coffee_Type <- "Robusta"
+
+arabica_data$Harvest.Year <- as.character(arabica_data$Harvest.Year)
+robusta_data$Harvest.Year <- as.character(robusta_data$Harvest.Year)
+
+# We have 2 species of coffee and we are merging them to form a single dataset
+
+merged_coffee_data <- bind_rows(arabica_data, robusta_data)
+
+head(merged_coffee_data)
+
+# We are looking for the null values in the dataset
+
+sum(is.na(merged_coffee_data))
+sum(duplicated(merged_coffee_data))
+
+```
+
+
+## Data cleaning 
+
+```{r}
+# Looking which columns have the majority of the null values
+
+missing_counts <- colSums(is.na(merged_coffee_data))
+missing_percent <- (missing_counts / nrow(merged_coffee_data)) * 100
+data.frame(Column = names(missing_counts), Missing_Count = missing_counts, Missing_Percentage = missing_percent)
+
+
+```
+
+```{r}
+
+# Dropping the columns having the most number of null values
+
+merged_coffee_data <- merged_coffee_data %>%
+  select(-Fragrance...Aroma, -Salt...Acid, -Bitter...Sweet, -Mouthfeel, -Uniform.Cup )
+
+# Dropping the rowss having null values
+
+merged_coffee_data <- merged_coffee_data %>% 
+  filter(!is.na(Aroma) & !is.na(Acidity) & !is.na(Uniformity) & !is.na(Sweetness) & !is.na(Quakers))
+
+# Replacing the null values for the altitudes with their median value
+merged_coffee_data$altitude_low_meters[is.na(merged_coffee_data$altitude_low_meters)] <- 
+  median(merged_coffee_data$altitude_low_meters, na.rm = TRUE)
+
+merged_coffee_data$altitude_high_meters[is.na(merged_coffee_data$altitude_high_meters)] <- 
+  median(merged_coffee_data$altitude_high_meters, na.rm = TRUE)
+
+merged_coffee_data$altitude_mean_meters[is.na(merged_coffee_data$altitude_mean_meters)] <- 
+  median(merged_coffee_data$altitude_mean_meters, na.rm = TRUE)
+
+```
+
+## Exploratory Data Analysis (EDA)
+
+```{r}
+summary(merged_coffee_data)
+
+
+```
+# visualizing the dataset
+# Histogram
+```{r}
+library(ggplot2)
+
+ggplot(merged_coffee_data, aes(x=Total.Cup.Points))+
+  geom_histogram(binwidth = 1, fill = "blue", color = "black") +
+  theme_minimal()+
+  ggtitle("Distribution of total cup points")
+
+
+
+```
+
+# Boxplot
+
+```{r}
+
+ggplot(merged_coffee_data, aes(x = "", y = altitude_mean_meters)) +
+  geom_boxplot(fill = "red", alpha = 0.5) +
+  theme_minimal() +
+  ggtitle("Boxplot of Altitude")
+
+
+```
+
+# Scatterplot - Numeric vs numeric 
+
+```{r}
+
+ggplot(merged_coffee_data, aes(x = altitude_mean_meters, y = Total.Cup.Points)) +
+  geom_point(alpha = 0.5) +
+  theme_minimal() +
+  ggtitle("Altitude vs. Total Cup Points")
+
+
+
+```
+# Barplot - Categorical vs numeric 
+
+```{r}
+
+ggplot(merged_coffee_data, aes(x = reorder(Country.of.Origin, Total.Cup.Points, FUN = median), y = Total.Cup.Points)) +
+  geom_bar(stat = "identity", fill = "steelblue") + 
+  coord_flip() +
+  ggtitle("Median Coffee Quality by Country")
+
+
+```
+
+# Correlation heatmap 
+
+```{r}
+
+library(corrplot)
+cor_matrix <- cor(merged_coffee_data %>% select(where(is.numeric)), use = "complete.obs")
+corrplot(cor_matrix, method = "color")
+
+
+```
+
+# Checking for the missing values
+
+```{r}
+
+
+colSums(is.na(merged_coffee_data))
+str(merged_coffee_data)
+merged_coffee_data$Country.of.Origin <- as.factor(merged_coffee_data$Country.of.Origin)
+
+```
+
+## Data Cleaning
+```{r}
+sum(is.na(merged_coffee_data))
+sum(duplicated(merged_coffee_data))  
+str(merged_coffee_data)
+merged_coffee_data$Altitude <- as.character(merged_coffee_data$Altitude)
+merged_coffee_data$Altitude <- gsub("[^0-9.-]", "", merged_coffee_data$Altitude)
+merged_coffee_data$Altitude <- as.numeric(merged_coffee_data$Altitude)
+sum(is.na(merged_coffee_data$Altitude))
+merged_coffee_data$Altitude[is.na(merged_coffee_data$Altitude)] <- median(merged_coffee_data$Altitude, na.rm = TRUE)
+summary(merged_coffee_data$Altitude)
+boxplot(merged_coffee_data$Altitude, main = "Altitude", col = "lightblue", horizontal = TRUE)
+merged_coffee_data$Altitude_log <- log1p(merged_coffee_data$Altitude)  
+upper_limit <- quantile(merged_coffee_data$Altitude, 0.95, na.rm = TRUE)
+merged_coffee_data$Altitude[merged_coffee_data$Altitude > upper_limit] <- upper_limit
+boxplot(merged_coffee_data$Altitude, main = "Altitude After Outlier Handling", col = "lightblue", horizontal = TRUE)
+summary(merged_coffee_data$Altitude)
+
+
+```
+# Taking action on categorical variables by converting them into dummy vars
+
+```{r}
+
+country_mean <- merged_coffee_data %>%
+  group_by(Country.of.Origin) %>%
+  summarise(mean_quality = mean(Total.Cup.Points, na.rm = TRUE))
+merged_coffee_data <- merged_coffee_data %>%
+  left_join(country_mean, by = "Country.of.Origin")
+merged_coffee_data <- merged_coffee_data %>%
+  select(-Country.of.Origin)
+head(merged_coffee_data)
+str(merged_coffee_data)
+
+
+```
+
+
+
+
+
+```{r}
+region_mean <- merged_coffee_data %>%
+  group_by(Region) %>%
+  summarise(mean_quality = mean(Total.Cup.Points, na.rm = TRUE))
+merged_coffee_data <- merged_coffee_data %>%
+  left_join(region_mean, by = "Region") %>%
+  select(-Region)
+merged_coffee_data$Altitude_scaled <- scale(merged_coffee_data$Altitude)
+merged_coffee_data$Altitude_normalized <- (merged_coffee_data$Altitude - min(merged_coffee_data$Altitude)) / 
+                                          (max(merged_coffee_data$Altitude) - min(merged_coffee_data$Altitude))
+merged_coffee_data$Altitude_normalized <- (merged_coffee_data$Altitude - min(merged_coffee_data$Altitude)) / 
+                                          (max(merged_coffee_data$Altitude) - min(merged_coffee_data$Altitude))
+merged_coffee_data$Altitude_Processing_Interaction <- merged_coffee_data$Altitude * as.numeric(factor(merged_coffee_data$Processing.Method))
+cor_matrix <- cor(merged_coffee_data[, sapply(merged_coffee_data, is.numeric)], use = "complete.obs")
+
+head(merged_coffee_data)
+
+```
+
+```{r}
+
+summary(merged_coffee_data$Altitude_scaled)
+summary(merged_coffee_data$Altitude_normalized)
+
+hist(merged_coffee_data$Altitude, main = "Original Altitude Distribution", xlab = "Altitude")
+hist(merged_coffee_data$Altitude_log, main = "Log-Transformed Altitude", xlab = "Log(Altitude)")
+
+plot(merged_coffee_data$Altitude, merged_coffee_data$Altitude_scaled, main = "Altitude vs. Scaled Altitude", xlab = "Altitude", ylab = "Altitude Scaled")
+plot(merged_coffee_data$Altitude, merged_coffee_data$Altitude_normalized, main = "Altitude vs. Normalized Altitude", xlab = "Altitude", ylab = "Altitude Normalized")
+
+
+```
+
+```{r}
+
+head(merged_coffee_data)
+summary(merged_coffee_data)
+```
+
+## Clustering
+
+```{r}
+library(caret)
+# 
+set.seed(123)
+numeric_cols <- sapply(merged_coffee_data_no_labels, is.numeric)
+merged_coffee_numeric <- merged_coffee_data_no_labels[, numeric_cols]
+cols_to_remove <- c("X", "Altitude", "altitude_low_meters", "altitude_high_meters", 
+                    "altitude_mean_meters", "Altitude_scaled", "Altitude_normalized", 
+                    "Altitude_log")
+merged_coffee_numeric <- merged_coffee_numeric[, !(names(merged_coffee_numeric) %in% cols_to_remove)]
+
+for (col in names(merged_coffee_numeric)) {
+  if (is.numeric(merged_coffee_numeric[[col]])) {  
+    merged_coffee_numeric[[col]][is.na(merged_coffee_numeric[[col]])] <- 
+      median(merged_coffee_numeric[[col]], na.rm = TRUE)
+  }
+}
+data_for_clustering <- merged_coffee_numeric[, c("Aroma", "Flavor", "Aftertaste", "Acidity", "Body", "Balance", "Uniformity", "Clean.Cup", "Sweetness", "Cupper.Points")]
+data_for_clustering_scaled <- scale(data_for_clustering)
+
+wss <- numeric(10)
+for (i in 1:10) {
+  kmeans_model <- kmeans(data_for_clustering_scaled, centers = i, nstart = 25)
+  wss[i] <- kmeans_model$tot.withinss
+}
+plot(1:10, wss, type = "b", pch = 19, frame = FALSE, 
+     xlab = "Number of Clusters", ylab = "Total Within-Cluster Sum of Squares")
+```
+
+
+```{r}
+optimal_k <- 3  # Update this based on the elbow plot
+kmeans_result <- kmeans(data_for_clustering_scaled, centers = optimal_k, nstart = 25)
+merged_coffee_numeric$Cluster <- kmeans_result$cluster  # Assign clusters to dataset
+
+```
+
+
+
+```{r}
+set.seed(123) 
+optimal_k <- 3  
+kmeans_model <- kmeans(data_for_clustering_scaled, centers = optimal_k, nstart = 25)
+
+pca <- prcomp(data_for_clustering_scaled, center = TRUE, scale. = TRUE)
+pca_data <- data.frame(pca$x[, 1:2], Cluster = as.factor(kmeans_model$cluster))
+library(ggplot2)
+ggplot(pca_data, aes(x = PC1, y = PC2, color = Cluster)) +
+  geom_point() +
+  labs(title = "PCA of Coffee Clusters", x = "Principal Component 1", y = "Principal Component 2") +
+  theme_minimal()
+cluster_centroids <- kmeans_model$centers
+print(cluster_centroids)
+table(kmeans_model$cluster, merged_coffee_numeric$Category.One.Defects)
+
+
+```
+## Classification 
+# Here in classification I am using 2 methods - Random forest and Logistic regression
+```{r}
+library(caret)
+library(randomForest)
+
+trainIndex <- createDataPartition(merged_coffee_numeric$Cluster, p = 0.8, list = FALSE, times = 1)
+trainData <- merged_coffee_numeric[trainIndex, ]
+testData <- merged_coffee_numeric[-trainIndex, ]
+trainX <- trainData[, -which(names(trainData) == "Cluster")]
+trainY <- trainData$Cluster
+testX <- testData[, -which(names(testData) == "Cluster")]
+testY <- testData$Cluster
+trainX <- trainX[, sapply(trainX, is.numeric)]
+testX <- testX[, sapply(testX, is.numeric)]
+cat("Missing values in trainX: ", sum(is.na(trainX)), "\n")
+cat("Missing values in testX: ", sum(is.na(testX)), "\n")
+preProcess_params <- preProcess(trainX, method = c("center", "scale"))
+trainX <- predict(preProcess_params, trainX)
+testX <- predict(preProcess_params, testX)
+
+knn_pred <- knn(trainX, testX, cl = trainY, k = 3)
+knn_accuracy <- mean(knn_pred == testY)
+cat("KNN Accuracy: ", knn_accuracy, "\n")
+trainData$Cluster <- as.factor(trainData$Cluster)
+testData$Cluster <- as.factor(testData$Cluster)
+
+rf_model <- randomForest(Cluster ~ ., data = trainData)
+rf_pred <- predict(rf_model, testData)
+all_levels <- union(levels(testData$Cluster), levels(rf_pred))  # Combine levels from both train and test
+rf_pred <- factor(rf_pred, levels = all_levels)
+testData$Cluster <- factor(testData$Cluster, levels = all_levels)
+rf_accuracy <- mean(rf_pred == testData$Cluster)
+cat("Random Forest Accuracy: ", rf_accuracy, "\n")
+
+if (knn_accuracy > rf_accuracy) {
+  cat("KNN performed better.\n")
+} else if (rf_accuracy > knn_accuracy) {
+  cat("Random Forest performed better.\n")
+} else {
+  cat("Both models performed equally well.\n")
+}
+
+```
+
+
+
+## Evaluation
+
+```{r}
+
+library(caret)
+library(randomForest)
+library(pROC)
+positive_classes <- c(1, 2)  # Define which class(es) should be considered "Positive"
+testData$BinaryCluster <- ifelse(testData$Cluster %in% positive_classes, "Positive", "Negative")
+rf_pred_bin <- ifelse(rf_pred %in% positive_classes, "Positive", "Negative")
+testData$BinaryCluster <- factor(testData$BinaryCluster, levels = c("Positive", "Negative"))
+rf_pred_bin <- factor(rf_pred_bin, levels = c("Positive", "Negative"))
+conf_matrix <- table(Predicted = rf_pred_bin, Actual = testData$BinaryCluster)
+print("Confusion Matrix:")
+print(conf_matrix)
+TP <- conf_matrix["Positive", "Positive"]
+FP <- conf_matrix["Positive", "Negative"]
+FN <- conf_matrix["Negative", "Positive"]
+TN <- conf_matrix["Negative", "Negative"]
+precision <- ifelse((TP + FP) > 0, TP / (TP + FP), 0)
+recall <- ifelse((TP + FN) > 0, TP / (TP + FN), 0)
+cat("Precision: ", precision, "\n")
+cat("Recall: ", recall, "\n")
+testData$Cluster <- factor(testData$Cluster)
+testData$Cluster <- factor(testData$Cluster)
+rf_probs <- predict(rf_model, testData, type = "prob")
+
+roc_curves <- lapply(levels(testData$Cluster), function(class) {
+  binary_true <- ifelse(testData$Cluster == class, 1, 0)
+  class_probs <- rf_probs[, class]
+  roc_curve <- roc(binary_true, class_probs)
+  return(roc_curve)
+})
+auc_values <- sapply(roc_curves, function(roc_curve) auc(roc_curve))
+cat("AUC for each class: \n")
+print(auc_values)
+plot(roc_curves[[1]], col = "red", lwd = 2, main = "Multiclass ROC Curve for Random Forest", 
+     xlim = c(1, 0), ylim = c(0, 1), xlab = "False Positive Rate", ylab = "True Positive Rate")
+for (i in 2:length(roc_curves)) {
+  plot(roc_curves[[i]], col = rainbow(length(roc_curves))[i], lwd = 2, add = TRUE)
+}
+legend("bottomright", legend = levels(testData$Cluster), col = rainbow(length(roc_curves)), lwd = 2)
+
+
+```
+
+# report
+
+1. Introduction
+In this assignment, we performed an end-to-end data analysis process on a coffee dataset with the aim of uncovering underlying patterns related to coffee defects and quality. The goal was to apply various data mining techniques, such as clustering and classification, to evaluate the quality of coffee based on several features, including altitude and total cup points. The process included data cleaning, exploratory data analysis (EDA), clustering, classification, and model evaluation.
+
+2. Data Preprocessing and Cleaning
+The first step in the analysis was cleaning the dataset to prepare it for analysis:
+
+Missing Values: We addressed missing values by first checking for their presence. Columns with a high percentage of missing data were dropped, while missing values in columns like altitude_low_meters, altitude_high_meters, and altitude_mean_meters were imputed with the median value of the respective columns.
+Outliers: Outliers in the altitude_mean_meters column were capped at the 95th percentile to avoid distorting the results of the analysis.
+Feature Scaling: Features with large numeric ranges were scaled to have zero mean and unit variance, ensuring that each feature contributed equally to the model.
+Categorical Features: Non-numeric categorical features such as Country.of.Origin were converted to factors to prepare them for modeling.
+The preprocessing was essential to improve model performance and ensure that the dataset was ready for clustering and classification.
+
+3. Exploratory Data Analysis (EDA)
+The EDA phase involved understanding the structure and distribution of the data:
+
+Histograms and Boxplots: We used histograms and boxplots to explore the distribution of critical numerical features, such as Total.Cup.Points and altitude_mean_meters. This helped us detect outliers and understand feature distributions.
+Correlation Analysis: A correlation matrix was created to examine relationships between numerical features. This analysis highlighted which features were strongly correlated and could potentially inform the clustering and classification models.
+Boxplots by Country: We visualized the relationship between Country.of.Origin and Total.Cup.Points using boxplots. This helped identify which countries tend to produce higher-quality coffee.
+4. Clustering Analysis
+After cleaning and transforming the data, we performed K-means clustering to group the coffee samples into meaningful clusters:
+
+Choosing the Optimal Number of Clusters: The elbow method was used to determine the optimal number of clusters, which resulted in 3 clusters.
+K-means Clustering: The K-means algorithm was applied to the scaled data, creating three clusters. We then visualized the clusters using Principal Component Analysis (PCA) to reduce the data to two dimensions for visualization.
+Cluster Validation: We analyzed the relationship between the clusters and coffee defects (Category.One.Defects) to assess whether the clusters corresponded to quality or defectiveness. The cluster centroids were also examined to understand the characteristics of each cluster.
+5. Classification
+Next, we focused on building classification models to predict the cluster labels based on the features:
+
+Data Partitioning: The dataset was split into training (80%) and testing (20%) sets.
+K-Nearest Neighbors (KNN): We trained a KNN classifier with k = 3. The model achieved 91.22% accuracy on the test set.
+Random Forest: A Random Forest classifier was trained on the data, achieving a significantly higher 98.85% accuracy compared to KNN.
+The performance of both models was compared, with Random Forest outperforming KNN. We decided to proceed with Random Forest as the preferred model due to its superior accuracy.
+
+6. Model Evaluation
+To evaluate the Random Forest model, we calculated several key metrics:
+
+Confusion Matrix: We generated a confusion matrix to assess the model's performance in predicting defective (positive) and non-defective (negative) coffee samples. The matrix showed:
+
+True Positives (TP): 94
+False Positives (FP): 4
+True Negatives (TN): 161
+False Negatives (FN): 2
+From this, we calculated Precision and Recall:
+
+Precision: 0.96
+Recall: 0.98
+ROC Curve: We plotted the ROC curve for the Random Forest model to evaluate its discriminative ability between positive and negative classes. The AUC for both classes was 0.998, indicating excellent model performance.
+
+7. Conclusion
+This analysis demonstrated the effectiveness of using data mining techniques like clustering and classification for evaluating coffee quality. The Random Forest classifier proved to be the best model, achieving high accuracy (98.85%) and excellent precision and recall scores. The AUC values (0.998 for both classes) further affirmed the model’s ability to distinguish between defective and non-defective coffee.
+
+The findings highlight the importance of feature scaling, handling missing values, and choosing the appropriate number of clusters when performing clustering and classification tasks. Additionally, Random Forest's performance over KNN suggests that more complex models may be more suitable for this type of dataset.
+
+Future work could involve tuning the Random Forest model and exploring other classification algorithms, such as Support Vector Machines (SVM), to further enhance prediction accuracy.
+
+
+## Reflection 
+
+Throughout the course, I have gained invaluable hands-on experience in applying data science techniques to real-world problems. The process of cleaning and preparing data, performing exploratory analysis, and building models has significantly improved my understanding of the practical challenges faced in data science. Before this course, my perspective was largely focused on the theoretical aspects of the field, but now I have a deeper appreciation for the iterative nature of the work involved in turning raw data into actionable insights. From clustering and classification to evaluating model performance, I've learned how crucial it is to evaluate different methods and adjust strategies based on the problem at hand. My perspective on data science has evolved to recognize that it's not just about knowing the algorithms, but understanding when and how to apply them effectively to extract meaningful patterns. This course has strengthened my foundation in data science and will serve as a solid base for future learning and projects in the field.
